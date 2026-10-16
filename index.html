@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>C$ — The C Karl Language</title>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+<style>
+  /* ==========================================================
+     C++ IDE THEME & LAYOUT
+     ========================================================== */
+  :root{
+    --bg:#1e1e1e;
+    --panel:#252526;
+    --panel2:#2d2d30;
+    --border:#3e3e42;
+    --fg:#d4d4d4;
+    --dim:#858585;
+    --accent:#007acc;
+    --green:#4ec9b0;
+    --red:#f44747;
+    --yellow:#dcdcaa;
+    --blue:#569cd6;
+    --purple:#c586c0;
+  }
+  *{box-sizing:border-box;}
+  html,body,#root{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size:13px;
+    overflow:hidden;
+  }
+  .app{height:100%;display:flex;flex-direction:column;}
+
+  /* ---------- TITLE BAR (Menu) ---------- */
+  .titlebar{
+    display:flex;align-items:center;gap:16px;
+    height:30px;padding:0 12px;
+    background:#3c3c3c;border-bottom:1px solid #222;
+    font-size:12px;color:#ccc;
+    flex:0 0 auto;
+  }
+  .menu-item{padding:4px 8px;border-radius:4px;cursor:pointer;}
+  .menu-item:hover{background:#505050;color:#fff;}
+
+  /* ---------- TOOLBAR ---------- */
+  .toolbar{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    padding:6px 12px;background:var(--panel);
+    border-bottom:1px solid var(--border);
+    flex:0 0 auto;
+  }
+  button{
+    font-family:inherit;font-size:12px;
+    padding:5px 10px;border-radius:4px;cursor:pointer;
+    background:var(--panel2);color:var(--fg);
+    border:1px solid var(--border);
+    transition:.1s;
+  }
+  button:hover{background:#3e3e42;border-color:#555;}
+  button:active{transform:translateY(1px);}
+  button.run{
+    background:#0e639c;border-color:#1177bb;color:#fff;font-weight:600;
+  }
+  button.run:hover{background:#1177bb;}
+
+  /* ---------- MAIN CONTAINER (Sidebar + Editor + Output) ---------- */
+  .main-container{
+    flex:1 1 auto;
+    display:flex;
+    min-height:0;   /* CRITICAL: allows children to shrink and scroll */
+    min-width:0;
+  }
+
+  /* Sidebar */
+  .sidebar{
+    width:200px;background:var(--panel);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;font-size:12px;
+    flex:0 0 auto;
+  }
+  .sidebar-header{
+    padding:8px 12px;font-weight:600;text-transform:uppercase;
+    font-size:11px;color:#ccc;letter-spacing:.5px;
+    border-bottom:1px solid var(--border);
+  }
+  .tree-item{
+    padding:4px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;
+  }
+  .tree-item:hover{background:#2a2d2e;}
+  .tree-item.active{background:#37373d;color:#fff;}
+  .tree-item .icon{color:var(--yellow);}
+  .tree-item .icon.cl{color:var(--blue);}
+
+  /* Editor Area */
+  .editor-area{
+    flex:1 1 auto;
+    display:flex;flex-direction:column;
+    min-width:0;
+    min-height:0;      /* CRITICAL: allow editor to shrink */
+    border-right:1px solid var(--border);
+  }
+  .tab-bar{
+    display:flex;background:var(--panel2);
+    border-bottom:1px solid var(--border);
+    flex:0 0 auto;
+  }
+  .tab{
+    padding:8px 16px;font-size:12px;background:var(--panel);
+    border-right:1px solid var(--border);color:var(--dim);
+    display:flex;align-items:center;gap:6px;cursor:pointer;
+  }
+  .tab.active{
+    background:var(--bg);color:#fff;border-top:2px solid var(--accent);
+  }
+
+  /* Editor wrapper: contains line numbers + textarea, scroll synced */
+  .editor-wrapper{
+    flex:1 1 auto;
+    display:flex;
+    position:relative;
+    min-height:0;      /* CRITICAL: allow inner scroll */
+    overflow:hidden;
+  }
+  .line-numbers{
+    flex:0 0 auto;
+    padding:12px 8px;
+    background:var(--bg);
+    color:#5a5a5a;
+    font-family:'Consolas','Courier New',monospace;
+    font-size:13px;
+    line-height:1.6;
+    text-align:right;
+    user-select:none;
+    min-width:44px;
+    border-right:1px solid #2a2a2a;
+    overflow:hidden;   /* hidden, but we drive scrollTop programmatically */
+    white-space:pre;
+  }
+  textarea{
+    flex:1 1 auto;
+    min-width:0;
+    min-height:0;
+    resize:none;
+    border:0;
+    outline:none;
+    background:transparent;
+    color:#d4d4d4;
+    font-family:'Consolas','Courier New',monospace;
+    font-size:13px;
+    line-height:1.6;
+    padding:12px 14px;
+    tab-size:2;
+    caret-color:var(--accent);
+    overflow:auto;         /* scrolls internally, doesn't push the layout */
+    white-space:pre;       /* no wrap: horizontal scroll instead of overflow */
+    word-wrap:normal;
+  }
+  textarea::selection{background:#264f78;}
+
+  /* Output Area */
+  .output-area{
+    width:40%;
+    flex:0 0 auto;
+    display:flex;flex-direction:column;
+    min-width:0;
+    min-height:0;      /* CRITICAL: allow terminal to scroll */
+    background:#1e1e1e;
+  }
+  .output-header{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:6px 12px;background:var(--panel2);
+    border-bottom:1px solid var(--border);font-size:11px;color:#ccc;
+    flex:0 0 auto;
+  }
+  .terminal{
+    flex:1 1 auto;
+    min-height:0;      /* CRITICAL */
+    overflow:auto;
+    padding:12px 14px;
+    background:#000;
+    font-family:'Consolas','Courier New',monospace;
+    font-size:12.5px;line-height:1.6;
+  }
+  .terminal .prompt{color:var(--green);}
+  .terminal .out{
+    color:#d4d4d4;
+    white-space:pre-wrap;   /* wrap long output so it doesn't run off */
+    word-break:break-word;
+  }
+  .terminal .err{color:var(--red);white-space:pre-wrap;word-break:break-word;}
+  .terminal .dim{color:#5a5a5a;font-style:italic;}
+
+  /* Status Bar */
+  .statusbar{
+    display:flex;align-items:center;justify-content:space-between;
+    height:22px;padding:0 12px;background:var(--accent);
+    color:#fff;font-size:11px;
+    flex:0 0 auto;
+  }
+  .statusbar .left, .statusbar .right{display:flex;gap:16px;align-items:center;}
+
+  /* Help Modal */
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.7);
+    display:flex;align-items:center;justify-content:center;
+    z-index:100;padding:24px;
+  }
+  .help-modal{
+    max-width:700px;width:100%;max-height:80vh;overflow:auto;
+    background:var(--panel);border:1px solid var(--border);border-radius:6px;
+    padding:24px;box-shadow:0 10px 40px rgba(0,0,0,.8);
+  }
+  .help-modal h2{margin:0 0 4px;font-size:18px;color:#fff;}
+  .help-modal p.sub{margin:0 0 20px;color:var(--dim);font-size:12px;}
+  .help-modal h3{
+    margin:18px 0 6px;font-size:12px;letter-spacing:1px;
+    text-transform:uppercase;color:var(--blue);
+  }
+  .help-modal pre{
+    margin:0;background:#1e1e1e;border:1px solid var(--border);
+    border-radius:4px;padding:10px 12px;overflow:auto;
+    font-size:12px;line-height:1.5;color:#d4d4d4;
+    white-space:pre-wrap;font-family:'Consolas','Courier New',monospace;
+  }
+  .help-modal .close-btn{
+    float:right;background:transparent;border:0;color:#ccc;
+    font-size:16px;cursor:pointer;
+  }
+
+  /* ==========================================================
+     CSS ART LOGO: C$ HEXAGON
+     ========================================================== */
+  .c-karl-logo{
+    position:relative;width:36px;height:32px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .hexagon{
+    position:absolute;inset:0;
+    background:linear-gradient(135deg, #e53935 45%, #b71c1c 55%);
+    clip-path:polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  }
+  .c-shape{
+    position:absolute;
+    width:16px;height:16px;
+    border:4px solid #fff;
+    border-radius:50%;
+    border-right-color:transparent;
+    transform:translateX(-1px) rotate(-30deg);
+    z-index:2;
+  }
+  .dollar-sign{
+    position:absolute;
+    color:#fff;font-size:14px;font-weight:900;
+    font-family:'Arial Black', Impact, sans-serif;
+    transform:translateX(3px) translateY(0px);
+    z-index:3;
+    text-shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+/* ============================================================
+   C$  —  "C Karl"  (sin Babel, sin JSX, sin imports)
+   ============================================================ */
+
+class CS_Error extends Error {
+  constructor(msg, line) {
+    super(msg);
+    this.name = 'C$ Error';
+    this.line = line;
+  }
+}
+
+/* ------------------------- LEXER ------------------------- */
+const OPS2 = ['==', '!=', '<=', '>=', '&&', '||'];
+const OPS1 = '+-*/%(){}[],=<>!$';
+
+function tokenize(src) {
+  const toks = [];
+  let i = 0, line = 1;
+  const push = (type, value) => toks.push({ type, value, line });
+
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '\n') { line++; i++; continue; }
+    if (c === ' ' || c === '\t' || c === '\r') { i++; continue; }
+    if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+    if (c === '/' && src[i + 1] === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) {
+        if (src[i] === '\n') line++;
+        i++;
+      }
+      i += 2; continue;
+    }
+    if (c >= '0' && c <= '9') {
+      let s = '';
+      while (i < src.length && /[0-9.]/.test(src[i])) s += src[i++];
+      push('num', parseFloat(s));
+      continue;
+    }
+    if (c === '"') {
+      i++;
+      let s = '';
+      while (i < src.length && src[i] !== '"') {
+        if (src[i] === '\\') {
+          i++;
+          const e = src[i];
+          s += e === 'n' ? '\n' : e === 't' ? '\t' : e;
+          i++;
+        } else {
+          s += src[i++];
+        }
+      }
+      i++;
+      push('str', s);
+      continue;
+    }
+    if (/[A-Za-z_]/.test(c)) {
+      let s = '';
+      while (i < src.length && /[A-Za-z0-9_]/.test(src[i])) s += src[i++];
+      push('ident', s);
+      continue;
+    }
+    const two = src.substr(i, 2);
+    if (OPS2.indexOf(two) !== -1) { push('op', two); i += 2; continue; }
+    if (OPS1.indexOf(c) !== -1) { push('op', c); i++; continue; }
+    throw new CS_Error("Line " + line + ": Karl found the forbidden character '" + c + "'. Karl weeps openly.", line);
+  }
+  push('eof', null);
+  return toks;
+}
+
+/* ------------------------- PARSER ------------------------- */
+class Parser {
+  constructor(toks) { this.toks = toks; this.pos = 0; }
+  peek(k) { k = k || 0; return this.toks[this.pos + k] || { type: 'eof', value: null, line: -1 }; }
+  is(v, k) {
+    k = k || 0;
+    const t = this.peek(k);
+    return (t.type === 'ident' || t.type === 'op') && t.value === v;
+  }
+  next() { return this.toks[this.pos++]; }
+  expect(v, hint) {
+    if (this.is(v)) return this.next();
+    const t = this.peek();
+    const got = t.value === null ? 'end of file' : "'" + t.value + "'";
+    throw new CS_Error(
+      "Line " + t.line + ": Karl expected '" + v + "'" + (hint ? " (" + hint + ")" : "") +
+      " but got " + got + ". Karl is not amused.", t.line);
+  }
+  parseProgram() {
+    const body = [];
+    while (this.peek().type !== 'eof') body.push(this.parseStatement());
+    return { type: 'Program', body: body };
+  }
+  parseStatement() {
+    if (this.is('moolah') || this.is('word') || this.is('flag')) return this.parseDecl();
+    if (this.is('maybe')) return this.parseIf();
+    if (this.is('again')) return this.parseWhile();
+    if (this.is('karl')) return this.parseFunc();
+    if (this.is('give')) return this.parseReturn();
+    if (this.is('{')) return this.parseBlock();
+    if (this.is('$')) { const t = this.next(); return { type: 'Empty', line: t.line }; }
+    const t = this.peek();
+    if (t.type === 'ident' && this.peek(1).type === 'op' && this.peek(1).value === '=') {
+      this.next(); this.next();
+      const value = this.parseExpr();
+      this.expect('$', 'every C$ statement ends with $');
+      return { type: 'Assign', name: t.value, value: value, line: t.line };
+    }
+    const expr = this.parseExpr();
+    this.expect('$', 'every C$ statement must end with $');
+    return { type: 'ExprStmt', expr: expr, line: t.line };
+  }
+  parseDecl() {
+    const kindTok = this.next();
+    const nameTok = this.peek();
+    if (nameTok.type !== 'ident') {
+      throw new CS_Error("Line " + nameTok.line + ": '" + kindTok.value + "' needs a variable name. Karl names things. You should too.", nameTok.line);
+    }
+    this.next();
+    let init = null;
+    if (this.is('=')) { this.next(); init = this.parseExpr(); }
+    this.expect('$', 'declarations end with $');
+    return { type: 'Decl', kind: kindTok.value, name: nameTok.value, init: init, line: kindTok.line };
+  }
+  parseIf() {
+    const line = this.next().line;
+    this.expect('(', 'maybe needs a condition');
+    const cond = this.parseExpr();
+    this.expect(')');
+    const then = this.parseBlock();
+    let alt = null;
+    if (this.is('otherwise')) { this.next(); alt = this.parseBlock(); }
+    this.expect('$', "Karl's 'maybe' block ends with $");
+    return { type: 'If', cond: cond, then: then, alt: alt, line: line };
+  }
+  parseWhile() {
+    const line = this.next().line;
+    this.expect('(', 'again needs a condition');
+    const cond = this.parseExpr();
+    this.expect(')');
+    const body = this.parseBlock();
+    this.expect('$', "Karl's 'again' block ends with $");
+    return { type: 'While', cond: cond, body: body, line: line };
+  }
+  parseFunc() {
+    const line = this.next().line;
+    const nameTok = this.peek();
+    if (nameTok.type !== 'ident') {
+      throw new CS_Error("Line " + nameTok.line + ": 'karl' needs a function name.", nameTok.line);
+    }
+    this.next();
+    this.expect('(');
+    const params = [];
+    if (!this.is(')')) {
+      params.push(this.next().value);
+      while (this.is(',')) { this.next(); params.push(this.next().value); }
+    }
+    this.expect(')');
+    const body = this.parseBlock();
+    this.expect('$', "Karl's function ends with $");
+    return { type: 'Func', name: nameTok.value, params: params, body: body, line: line };
+  }
+  parseReturn() {
+    const line = this.next().line;
+    let value = null;
+    if (!this.is('$')) value = this.parseExpr();
+    this.expect('$');
+    return { type: 'Return', value: value, line: line };
+  }
+  parseBlock() {
+    this.expect('{', 'Karl needs a { here');
+    const body = [];
+    while (!this.is('}')) {
+      if (this.peek().type === 'eof') {
+        throw new CS_Error("Line " + this.peek().line + ": Karl reached the end of the file while hunting for a '}'. Karl is lost and afraid.", this.peek().line);
+      }
+      body.push(this.parseStatement());
+    }
+    this.next();
+    return { type: 'Block', body: body };
+  }
+  parseExpr() { return this.parseOr(); }
+  parseOr() {
+    let left = this.parseAnd();
+    while (this.is('||') || this.is('or')) {
+      this.next();
+      left = { type: 'Bin', op: '||', left: left, right: this.parseAnd(), line: left.line };
+    }
+    return left;
+  }
+  parseAnd() {
+    let left = this.parseEquality();
+    while (this.is('&&') || this.is('and')) {
+      this.next();
+      left = { type: 'Bin', op: '&&', left: left, right: this.parseEquality(), line: left.line };
+    }
+    return left;
+  }
+  parseEquality() {
+    let left = this.parseComparison();
+    while (this.is('==') || this.is('!=') || this.is('is') || this.is('aint')) {
+      const raw = this.next().value;
+      const op = raw === 'is' ? '==' : raw === 'aint' ? '!=' : raw;
+      left = { type: 'Bin', op: op, left: left, right: this.parseComparison(), line: left.line };
+    }
+    return left;
+  }
+  parseComparison() {
+    let left = this.parseAdditive();
+    while (this.is('<') || this.is('>') || this.is('<=') || this.is('>=')) {
+      const op = this.next().value;
+      left = { type: 'Bin', op: op, left: left, right: this.parseAdditive(), line: left.line };
+    }
+    return left;
+  }
+  parseAdditive() {
+    let left = this.parseMultiplicative();
+    while (this.is('+') || this.is('-')) {
+      const op = this.next().value;
+      left = { type: 'Bin', op: op, left: left, right: this.parseMultiplicative(), line: left.line };
+    }
+    return left;
+  }
+  parseMultiplicative() {
+    let left = this.parseUnary();
+    while (this.is('*') || this.is('/') || this.is('%')) {
+      const op = this.next().value;
+      left = { type: 'Bin', op: op, left: left, right: this.parseUnary(), line: left.line };
+    }
+    return left;
+  }
+  parseUnary() {
+    if (this.is('-') || this.is('!') || this.is('not')) {
+      const t = this.next();
+      const op = t.value === 'not' ? '!' : t.value;
+      return { type: 'Un', op: op, operand: this.parseUnary(), line: t.line };
+    }
+    return this.parseCall();
+  }
+  parseCall() {
+    let expr = this.parsePrimary();
+    while (this.is('(')) {
+      this.next();
+      const args = [];
+      if (!this.is(')')) {
+        args.push(this.parseExpr());
+        while (this.is(',')) { this.next(); args.push(this.parseExpr()); }
+      }
+      this.expect(')');
+      expr = { type: 'Call', callee: expr, args: args, line: expr.line };
+    }
+    return expr;
+  }
+  parsePrimary() {
+    const t = this.peek();
+    if (t.type === 'num' || t.type === 'str') {
+      this.next();
+      return { type: 'Literal', value: t.value, line: t.line };
+    }
+    if (t.type === 'ident') {
+      if (t.value === 'k') { this.next(); return { type: 'Literal', value: true, line: t.line }; }
+      if (t.value === 'nope') { this.next(); return { type: 'Literal', value: false, line: t.line }; }
+      this.next();
+      return { type: 'Ident', name: t.value, line: t.line };
+    }
+    if (t.type === 'op' && t.value === '(') {
+      this.next();
+      const e = this.parseExpr();
+      this.expect(')');
+      return e;
+    }
+    throw new CS_Error("Line " + t.line + ": Karl found " + (t.value === null ? 'nothing at all' : "'" + t.value + "'") + " where a value should be. Karl sighs loudly.", t.line);
+  }
+}
+
+/* ------------------------- RUNTIME ------------------------- */
+function ReturnSignal(v) { this.value = v; }
+function typeOf(v) {
+  if (typeof v === 'number') return 'moolah';
+  if (typeof v === 'string') return 'word';
+  if (typeof v === 'boolean') return 'flag';
+  if (typeof v === 'function') return 'karl';
+  if (v && v.__userfunc) return 'karl';
+  return 'nothing';
+}
+function enforceType(kind, value, name, line) {
+  const t = typeOf(value);
+  if (t !== kind) {
+    throw new CS_Error("Line " + line + ": Karl refuses to put a " + t + " into a '" + kind + "' named '" + name + "'. Types are not a suggestion.", line);
+  }
+}
+function fmt(v) {
+  if (typeof v === 'number') {
+    if (Number.isInteger(v)) return String(v);
+    return String(Math.round(v * 1e10) / 1e10);
+  }
+  if (typeof v === 'boolean') return v ? 'k' : 'nope';
+  if (v === undefined || v === null) return 'nothing';
+  if (typeof v === 'function' || (v && v.__userfunc)) return '<karl>';
+  return String(v);
+}
+function truthy(v) {
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'string') return v.length > 0;
+  return !!v;
+}
+function Env(parent) {
+  this.vars = new Map();
+  this.parent = parent || null;
+}
+Env.prototype.declare = function(name, value, kind, line) {
+  if (this.vars.has(name)) {
+    throw new CS_Error("Line " + line + ": '" + name + "' is already declared here. Karl hates clones.", line);
+  }
+  this.vars.set(name, { value: value, kind: kind });
+};
+Env.prototype.lookup = function(name) {
+  let e = this;
+  while (e) { if (e.vars.has(name)) return e; e = e.parent; }
+  return null;
+};
+Env.prototype.get = function(name, line) {
+  const e = this.lookup(name);
+  if (!e) {
+    throw new CS_Error("Line " + line + ": '" + name + "' is not declared. Karl does not know this word. Use moolah, word or flag.", line);
+  }
+  return e.vars.get(name).value;
+};
+Env.prototype.set = function(name, value, line) {
+  const e = this.lookup(name);
+  if (!e) {
+    throw new CS_Error("Line " + line + ": cannot assign to '" + name + "' — it does not exist. Karl cannot fill a void.", line);
+  }
+  const entry = e.vars.get(name);
+  enforceType(entry.kind, value, name, line);
+  entry.value = value;
+};
+function Interpreter(out) {
+  this.out = out;
+  this.global = new Env();
+  const self = this;
+  const B = function(name, fn) { self.global.vars.set(name, { value: fn, kind: 'karl' }); };
+  B('yell', function() {
+    const args = Array.prototype.slice.call(arguments);
+    self.out.push(args.map(fmt).join(' '));
+  });
+  B('len', function(v) {
+    if (typeof v !== 'string') throw new CS_Error("len() wants a word, got a " + typeOf(v) + ". Karl counted anyway.", 0);
+    return v.length;
+  });
+  B('up', function(v) { return String(v).toUpperCase(); });
+  B('low', function(v) { return String(v).toLowerCase(); });
+  B('str', function(v) { return fmt(v); });
+  B('num', function(v) {
+    const n = Number(v);
+    if (Number.isNaN(n)) throw new CS_Error("num() could not turn '" + fmt(v) + "' into a moolah. Karl tried. Barely.", 0);
+    return n;
+  });
+  B('sqrt', function(v) {
+    if (typeof v !== 'number') throw new CS_Error("sqrt() wants a moolah.", 0);
+    return Math.sqrt(v);
+  });
+}
+Interpreter.prototype.run = function(ast) {
+  const env = new Env(this.global);
+  for (let i = 0; i < ast.body.length; i++) this.exec(ast.body[i], env);
+};
+Interpreter.prototype.execBlock = function(node, parentEnv) {
+  const env = new Env(parentEnv);
+  for (let i = 0; i < node.body.length; i++) this.exec(node.body[i], env);
+};
+Interpreter.prototype.exec = function(node, env) {
+  switch (node.type) {
+    case 'Empty': return;
+    case 'Decl': {
+      let val;
+      if (node.init) {
+        val = this.eval(node.init, env);
+        enforceType(node.kind, val, node.name, node.line);
+      } else {
+        val = node.kind === 'moolah' ? 0 : node.kind === 'word' ? '' : false;
+      }
+      env.declare(node.name, val, node.kind, node.line);
+      return;
+    }
+    case 'Assign': {
+      const val = this.eval(node.value, env);
+      env.set(node.name, val, node.line);
+      return;
+    }
+    case 'If': {
+      if (truthy(this.eval(node.cond, env))) this.execBlock(node.then, env);
+      else if (node.alt) this.execBlock(node.alt, env);
+      return;
+    }
+    case 'While': {
+      let guard = 0;
+      while (truthy(this.eval(node.cond, env))) {
+        this.execBlock(node.body, env);
+        if (++guard > 100000) {
+          throw new CS_Error('Karl got dizzy. Infinite loop detected after 100000 iterations.', node.line);
+        }
+      }
+      return;
+    }
+    case 'Func': {
+      env.declare(node.name, { __userfunc: true, params: node.params, body: node.body, env: env }, 'karl', node.line);
+      return;
+    }
+    case 'Return':
+      throw new ReturnSignal(node.value ? this.eval(node.value, env) : undefined);
+    case 'Block':
+      this.execBlock(node, env);
+      return;
+    case 'ExprStmt':
+      this.eval(node.expr, env);
+      return;
+    default:
+      throw new CS_Error("Karl does not understand statement '" + node.type + "'. Neither do you.", node.line || 0);
+  }
+};
+Interpreter.prototype.eval = function(node, env) {
+  switch (node.type) {
+    case 'Literal': return node.value;
+    case 'Ident': return env.get(node.name, node.line);
+    case 'Un': {
+      const v = this.eval(node.operand, env);
+      if (node.op === '-') {
+        if (typeof v !== 'number') {
+          throw new CS_Error("Line " + node.line + ": Karl cannot negate a " + typeOf(v) + ".", node.line);
+        }
+        return -v;
+      }
+      if (node.op === '!') return !truthy(v);
+      throw new CS_Error("Line " + node.line + ": unknown unary operator '" + node.op + "'.", node.line);
+    }
+    case 'Bin': return this.binop(node, env);
+    case 'Call': {
+      const fn = this.eval(node.callee, env);
+      const args = node.args.map(function(a) { return this.eval(a, env); }, this);
+      return this.call(fn, args, node.line);
+    }
+    default:
+      throw new CS_Error("Karl cannot evaluate '" + node.type + "'. Karl gives up.", node.line || 0);
+  }
+};
+Interpreter.prototype.binop = function(node, env) {
+  const op = node.op;
+  if (op === '&&') {
+    if (!truthy(this.eval(node.left, env))) return false;
+    return truthy(this.eval(node.right, env));
+  }
+  if (op === '||') {
+    if (truthy(this.eval(node.left, env))) return true;
+    return truthy(this.eval(node.right, env));
+  }
+  const l = this.eval(node.left, env);
+  const r = this.eval(node.right, env);
+  switch (op) {
+    case '+':
+      if (typeof l === 'string' || typeof r === 'string') return fmt(l) + fmt(r);
+      if (typeof l === 'number' && typeof r === 'number') return l + r;
+      throw new CS_Error("Line " + node.line + ": Karl cannot add a " + typeOf(l) + " and a " + typeOf(r) + ". Try harder.", node.line);
+    case '-': case '*': case '/': case '%': {
+      if (typeof l !== 'number' || typeof r !== 'number') {
+        throw new CS_Error("Line " + node.line + ": '" + op + "' is for moolahs only. Karl counted your mistakes.", node.line);
+      }
+      if ((op === '/' || op === '%') && r === 0) {
+        throw new CS_Error("Line " + node.line + ": Division by zero. Karl is undefined.", node.line);
+      }
+      if (op === '-') return l - r;
+      if (op === '*') return l * r;
+      if (op === '/') return l / r;
+      return l % r;
+    }
+    case '==': return l === r;
+    case '!=': return l !== r;
+    case '<': case '>': case '<=': case '>=': {
+      const ok = (typeof l === 'number' && typeof r === 'number') || (typeof l === 'string' && typeof r === 'string');
+      if (!ok) {
+        throw new CS_Error("Line " + node.line + ": Karl cannot compare a " + typeOf(l) + " with a " + typeOf(r) + ".", node.line);
+      }
+      if (op === '<') return l < r;
+      if (op === '>') return l > r;
+      if (op === '<=') return l <= r;
+      return l >= r;
+    }
+  }
+  throw new CS_Error("Line " + node.line + ": unknown operator '" + op + "'. Karl blames you.", node.line);
+};
+Interpreter.prototype.call = function(fn, args, line) {
+  if (typeof fn === 'function') {
+    try { return fn.apply(null, args); }
+    catch (e) {
+      if (e instanceof CS_Error) throw e;
+      throw new CS_Error("Line " + line + ": a built-in exploded: " + e.message, line);
+    }
+  }
+  if (fn && fn.__userfunc) {
+    if (args.length !== fn.params.length) {
+      throw new CS_Error("Line " + line + ": this karl takes " + fn.params.length + " argument(s); you gave " + args.length + ". Karl counted.", line);
+    }
+    const local = new Env(fn.env);
+    fn.params.forEach(function(p, i) { local.vars.set(p, { value: args[i], kind: typeOf(args[i]) }); });
+    try {
+      for (let i = 0; i < fn.body.body.length; i++) this.exec(fn.body.body[i], local);
+    } catch (e) {
+      if (e instanceof ReturnSignal) return e.value;
+      throw e;
+    }
+    return undefined;
+  }
+  throw new CS_Error("Line " + line + ": Karl cannot call a " + typeOf(fn) + ". Only karls are callable.", line);
+};
+
+/* ------------------------- ENTRY ------------------------- */
+function execute(source, out) {
+  if (!/^[ \t]*#include[ \t]*<karl\.h>[ \t]*\$?[ \t]*$/m.test(source)) {
+    throw new CS_Error("C$ FATAL: every .cl file MUST begin with '#include <karl.h>$'. Karl is very disappointed in you.", 1);
+  }
+  const clean = source.replace(/^[ \t]*#include[ \t]*<karl\.h>[ \t]*\$?[ \t]*$/gm, '');
+  const tokens = tokenize(clean);
+  const ast = new Parser(tokens).parseProgram();
+  const interp = new Interpreter(out);
+  interp.run(ast);
+}
+
+/* ============================================================
+   UI COMPONENTS (React.createElement — No JSX)
+   ============================================================ */
+const h = React.createElement;
+const useState = React.useState;
+const useRef = React.useRef;
+const useEffect = React.useEffect;
+
+const EXAMPLE =
+'#include <karl.h>$\n' +
+'// Karl\'s first program. Do not disappoint him.\n' +
+'moolah x = 10$\n' +
+'moolah y = 32$\n' +
+'word name = "Karl"$\n' +
+'\n' +
+'yell("Hello, " + name + "!")$\n' +
+'yell("x + y =", x + y)$\n' +
+'\n' +
+'karl add(a, b) {\n' +
+'  give a + b$\n' +
+'}$\n' +
+'\n' +
+'yell("add(3, 4) =", add(3, 4))$\n' +
+'\n' +
+'moolah i = 0$\n' +
+'again (i < 3) {\n' +
+'  yell("loop number", i)$\n' +
+'  i = i + 1$\n' +
+'}$\n' +
+'\n' +
+'maybe (x > 5) {\n' +
+'  yell("x is big. Karl approves.")$\n' +
+'} otherwise {\n' +
+'  yell("x is small. Karl is disappointed.")$\n' +
+'}$\n';
+
+const COMPLIMENTS = [
+  'Karl is mildly impressed.',
+  'Karl did not hate that.',
+  'Acceptable. Barely.',
+  'Karl will allow it.',
+  'That compiled. Miracles happen.',
+  'Karl nods once. Do not get used to it.'
+];
+const INSULTS = [
+  'Karl is furious.',
+  'Karl has seen better code in a toaster.',
+  'Karl is reconsidering his life choices.',
+  'Karl blames you specifically.',
+  'This is why Karl drinks.'
+];
+const pick = function(a) { return a[Math.floor(Math.random() * a.length)]; };
+
+/* --- CSS ART LOGO COMPONENT --- */
+function CKarlLogo() {
+  return h('div', { className: 'c-karl-logo' },
+    h('div', { className: 'hexagon' }),
+    h('div', { className: 'c-shape' }),
+    h('div', { className: 'dollar-sign' }, '$')
+  );
+}
+
+function HelpPanel(props) {
+  const onClose = props.onClose;
+  const pre = function(txt) { return h('pre', null, txt); };
+  return h('div', { className: 'overlay', onClick: onClose },
+    h('div', { className: 'help-modal', onClick: function(e) { e.stopPropagation(); } },
+      h('button', { className: 'close-btn', onClick: onClose }, '\u2716'),
+      h('h2', null, 'C$ — Language Reference'),
+      h('p', { className: 'sub' }, '"C Karl". The worst member of the C family. File extension: .cl'),
+      h('h3', null, 'Mandatory header'),
+      pre('#include <karl.h>$'),
+      h('h3', null, 'The Golden Rule'),
+      pre('Every statement MUST end with a dollar sign:  $'),
+      h('h3', null, 'Comments'),
+      pre('// Karl ignores this line\n/* Karl also ignores this */'),
+      h('h3', null, 'Declarations'),
+      pre('moolah x = 5$        // number\nword  s = "hi"$      // string\nflag  b = k$         // boolean'),
+      h('h3', null, 'Literals'),
+      pre('42   3.14   "text"   k (true)   nope (false)'),
+      h('h3', null, 'Output'),
+      pre('yell("hello")$\nyell("x =", x)$'),
+      h('h3', null, 'If / Else'),
+      pre('maybe (x > 5) {\n  yell("big")$\n} otherwise {\n  yell("small")$\n}$'),
+      h('h3', null, 'While'),
+      pre('again (i < 10) {\n  i = i + 1$\n}$'),
+      h('h3', null, 'Functions'),
+      pre('karl add(a, b) {\n  give a + b$\n}$\nyell(add(1, 2))$'),
+      h('h3', null, 'Operators'),
+      pre('+  -  *  /  %      arithmetic\nis   aint          equality   (== and !=)\n<  >  <=  >=       comparison\nand  or  not       logic      (also && || !)'),
+      h('h3', null, 'Built-ins'),
+      pre('yell(...)   len(x)   up(x)   low(x)   str(x)   num(x)   sqrt(x)')
+    )
+  );
+}
+
+function App() {
+  const codeState = useState(EXAMPLE);
+  const code = codeState[0], setCode = codeState[1];
+
+  const outputState = useState([]);
+  const output = outputState[0], setOutput = outputState[1];
+
+  const errorState = useState(null);
+  const error = errorState[0], setError = errorState[1];
+
+  const fileNameState = useState('main.cl');
+  const fileName = fileNameState[0], setFileName = fileNameState[1];
+
+  const showHelpState = useState(false);
+  const showHelp = showHelpState[0], setShowHelp = showHelpState[1];
+
+  const karlSaysState = useState('Karl is watching. Always.');
+  const karlSays = karlSaysState[0], setKarlSays = karlSaysState[1];
+
+  const fileRef = useRef(null);
+  const outRef = useRef(null);
+  const lineNumRef = useRef(null);   // NEW: ref to line-number column for scroll sync
+
+  useEffect(function() {
+    if (outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight;
+  }, [output, error]);
+
+  const run = function() {
+    const out = [];
+    let err = null;
+    try {
+      execute(code, out);
+      setKarlSays(pick(COMPLIMENTS));
+    } catch (e) {
+      err = e instanceof CS_Error ? e.message : String(e);
+      setKarlSays(pick(INSULTS));
+    }
+    setOutput(out);
+    setError(err);
+  };
+
+  const onKeyDown = function(e) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const ta = e.target;
+      const s = ta.selectionStart, en = ta.selectionEnd;
+      const nv = code.slice(0, s) + '  ' + code.slice(en);
+      setCode(nv);
+      requestAnimationFrame(function() { ta.selectionStart = ta.selectionEnd = s + 2; });
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      run();
+    }
+  };
+
+  // NEW: keep line-number column scrolled in sync with the textarea
+  const onEditorScroll = function(e) {
+    if (lineNumRef.current) {
+      lineNumRef.current.scrollTop = e.target.scrollTop;
+    }
+  };
+
+  const onFile = function(e) {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = function() {
+      setCode(String(reader.result));
+      setFileName(f.name);
+      setKarlSays('Karl received "' + f.name + '". He is suspicious of its contents.');
+      setError(null);
+      setOutput([]);
+    };
+    reader.readAsText(f);
+    e.target.value = '';
+  };
+
+  const save = function() {
+    const name = fileName.endsWith('.cl') ? fileName : fileName + '.cl';
+    const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setKarlSays('Karl wrote "' + name + '" to your disk. Do not lose it.');
+  };
+
+  const clearOut = function() {
+    setOutput([]); setError(null); setKarlSays('Karl forgot everything.');
+  };
+
+  const newFile = function() {
+    setCode('#include <karl.h>$\n\n// Karl awaits your instructions.\n');
+    setFileName('untitled.cl');
+    setOutput([]);
+    setError(null);
+    setKarlSays('A blank slate. Karl is already bored.');
+  };
+
+  // Generate line numbers (just for visual IDE feel)
+  const lineCount = code.split('\n').length;
+  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+
+  const terminalContent = [];
+  if (output.length === 0 && !error) {
+    terminalContent.push(h('div', { className: 'dim', key: 'dim' }, 'Karl has nothing to say. Press Run.'));
+  } else {
+    output.forEach(function(line, i) {
+      terminalContent.push(h('div', { className: 'out', key: 'out-' + i }, h('span', { className: 'prompt' }, 'karl@c-karl:~$ '), line));
+    });
+    if (error) {
+      terminalContent.push(h('div', { className: 'err', key: 'err' }, 'C$ Error: ' + error));
+    }
+  }
+
+  return h('div', { className: 'app' },
+
+    /* --- TITLE BAR (Menu) --- */
+    h('div', { className: 'titlebar' },
+      h('div', { className: 'menu-item' }, 'File'),
+      h('div', { className: 'menu-item' }, 'Edit'),
+      h('div', { className: 'menu-item' }, 'Run'),
+      h('div', { className: 'menu-item' }, 'Help')
+    ),
+
+    /* --- TOOLBAR --- */
+    h('div', { className: 'toolbar' },
+      h('button', { onClick: newFile }, '\uD83D\uDDCB New File'),
+      h('button', { onClick: function() { fileRef.current.click(); } }, '\uD83D\uDCC2 Open .cl'),
+      h('button', { onClick: save }, '\uD83D\uDCBE Save .cl'),
+      h('button', { className: 'run', onClick: run }, '\u25B6 Run (Ctrl+Enter)'),
+      h('button', { onClick: clearOut }, '\uD83E\uDDF9 Clear'),
+      h('button', { onClick: function() { setShowHelp(true); } }, '\u2753 Karl\'s Rules'),
+      h('input', {
+        ref: fileRef, type: 'file', accept: '.cl,.txt,text/plain',
+        style: { display: 'none' }, onChange: onFile
+      })
+    ),
+
+    /* --- MAIN CONTAINER --- */
+    h('div', { className: 'main-container' },
+
+      /* Sidebar */
+      h('div', { className: 'sidebar' },
+        h('div', { className: 'sidebar-header' }, 'EXPLORER'),
+        h('div', { className: 'tree-item' },
+          h('span', { className: 'icon' }, '\uD83D\uDCC1'),
+          'C$ Project'
+        ),
+        h('div', { className: 'tree-item', style: { paddingLeft: '24px' } },
+          h('span', { className: 'icon cl' }, '\uD83D\uDCC4'),
+          fileName
+        ),
+        h('div', { className: 'tree-item active', style: { paddingLeft: '24px' } },
+          h('span', { className: 'icon cl' }, '\uD83D\uDCC4'),
+          'karl.h'
+        )
+      ),
+
+      /* Editor Area */
+      h('div', { className: 'editor-area' },
+        h('div', { className: 'tab-bar' },
+          h('div', { className: 'tab active' },
+            h('span', { className: 'icon cl' }, '\uD83D\uDCC4'),
+            fileName
+          )
+        ),
+        h('div', { className: 'editor-wrapper' },
+          h('div', { className: 'line-numbers', ref: lineNumRef }, lineNumbers),
+          h('textarea', {
+            spellCheck: false,
+            wrap: 'off',                     /* NEW: don't wrap long lines, scroll horizontally */
+            value: code,
+            onChange: function(e) { setCode(e.target.value); },
+            onKeyDown: onKeyDown,
+            onScroll: onEditorScroll         /* NEW: keep line numbers synced */
+          })
+        )
+      ),
+
+      /* Output Area */
+      h('div', { className: 'output-area' },
+        h('div', { className: 'output-header' },
+          h('span', null, 'TERMINAL'),
+          h('span', { style: { color: 'var(--green)' } }, 'karl@c-karl')
+        ),
+        h('div', { className: 'terminal', ref: outRef }, terminalContent)
+      )
+    ),
+
+    /* --- STATUS BAR --- */
+    h('div', { className: 'statusbar' },
+      h('div', { className: 'left' },
+        h('span', null, '\uD83D\uDD27 C$ (C Karl) v1.0.0'),
+        h('span', null, '\u26A0 0 Problems')
+      ),
+      h('div', { className: 'right' },
+        h('span', null, 'UTF-8'),
+        h('span', null, 'Ln ' + lineCount + ', Col 1'),
+        h('span', null, 'Spaces: 2')
+      )
+    ),
+
+    showHelp ? h(HelpPanel, { onClose: function() { setShowHelp(false); } }) : null
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>
