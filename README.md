@@ -52,3 +52,4 @@ maybe (x > 5) {
 Este proyecto trae una LICENCIA MIT, ¿Que significa? que puedes modificar el proyecto, probarlo, descargarlo legalmente y otro tipo de cosas
 
 > Si no te gusto C$ por favor insultame en Issues o lo que sea no se
+> Si te gusto dejame un Star en el repositorio :)
